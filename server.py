@@ -84,7 +84,7 @@ async def listen_queue(websocket, _cid):
     while True:
         await asyncio.sleep(1)
         if proceed < len(events):
-            for event in events:
+            for event in events[proceed:]:
                 # print(event)
                 console.log(f"客户端{client_id}: 执行 {event}")
                 if event["action"] == "message_data":
@@ -104,10 +104,8 @@ async def echo(websocket, _path):
     client_id += 1
     cid = client_id
     console.log(f"客户端{client_id}: 调用了一个echo函数")
-    _proceed = 0
-    async with asyncio.TaskGroup() as tg:
-        _listen = tg.create_task(listen_queue(websocket, cid))
-        _get = tg.create_task(get_message(websocket, cid))
+    await asyncio.create_task(listen_queue(websocket, cid))
+    await asyncio.create_task(get_message(websocket, cid))
 
 
 async def run_input():
