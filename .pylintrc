@@ -1,0 +1,7 @@
+[MASTER]
+jobs = 0
+max-line-length = 150
+disable = fixme
+
+[MESSAGES CONTROL]
+disable = R
