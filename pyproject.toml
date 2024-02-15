@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "echo-client"
-version = "0.1.2"
+version = "0.1.3"
 description = ""
 authors = ["Rickyxrc <rickyxrc@outlook.com>"]
 readme = "README.md"
