@@ -1,3 +1,7 @@
 # direnv cache
 .direnv
 
+# python cache
+__pycache__
+*.pyc
+

@@ -1,7 +1,7 @@
 [MASTER]
 jobs = 0
 max-line-length = 150
-disable = fixme
+disable = fixme, redefined-outer-name
 
 [MESSAGES CONTROL]
 disable = R

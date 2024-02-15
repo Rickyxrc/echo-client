@@ -1,5 +1,6 @@
 """
 websocket 服务器模块
+这可能是我这辈子到现在代码文档写的最详细的一次ww
 """
 import asyncio
 import json
@@ -9,33 +10,14 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
-
-def parse_message(msg: str) -> str:
-    """
-    解析文字输入，传出为 echo 程序可以理解的文本
-    """
-    # TODO: 1. 拆分模块
-    # TODO: 2. 制定一套文本输入规范
-    # 目前先返回单句话，这个逻辑待定
-    return json.dumps(
-        {
-            "action": "message_data",
-            "data": {
-                "username": username,
-                "messages": [
-                    {"message": msg},
-                ],
-            },
-        }
-    )
-
+from .message import parse_message, render
 
 # TODO: 用配置文件来改这些，别修改源代码
-COMMAND_PREFIX = "/"
-# pylint: disable=invalid-name
-username = "？？？"
-HOST = "127.0.0.1"
-PORT = 3000
+config = {}
+config["command_prefix"] = "/"
+config["username"] = "/"
+config["host"] = "127.0.0.1"
+config["port"] = 3000
 
 console = Console()
 
@@ -50,6 +32,7 @@ async def get_message(websocket, cid):
     """
     从 Echo client 处接收消息并显示（或回传一些内容）
     """
+
     async for message in websocket:
         data = json.loads(message)
         response = f"客户端{cid}: "
@@ -63,15 +46,17 @@ async def get_message(websocket, cid):
                         "data": {
                             "username": "系统",
                             "messages": [
-                                {"message": "websocket服务器连接成功！"},
+                                {
+                                    "message": [
+                                        {"text": "websocket服务器，", "pause": 15},
+                                        {"text": "连接成功！", "event": "shout"},
+                                    ]
+                                },
                             ],
                         },
                     }
                 )
             )
-            # await websocket.send(json.dumps({
-            # "action": "echo_next",
-            # }))
 
         elif data["action"] == "close":
             response += "发出下线请求"
@@ -93,7 +78,6 @@ async def listen_queue(websocket, cid):
         await asyncio.sleep(1)
         if proceed < len(events):
             for event in events[proceed:]:
-                # print(event)
                 console.log(f"客户端{cid}: 执行 {event}")
                 if event["action"] == "message_data":
                     console.log(f"客户端{cid}: 发送文字信息")
@@ -126,7 +110,6 @@ async def run_input():
     获取用户输入，执行命令
     """
     # pylint: disable=global-statement
-    global username
     session = PromptSession()
     while True:
         with patch_stdout(raw=True):
@@ -134,16 +117,21 @@ async def run_input():
         # TODO: 这个太简陋了，考虑用 argparse 之类的库在这里解析命令
         if input_data == "":
             console.log("[red]打个字再回车啊宝！[/red]")
-        elif input_data[0] != COMMAND_PREFIX:
+        elif input_data[0] != config["command_prefix"]:
             console.log(f"发送文字消息: {input_data}")
-            events.append({"action": "message_data", "data": parse_message(input_data)})
+            events.append(
+                {
+                    "action": "message_data",
+                    "data": render(config, parse_message(input_data)),
+                }
+            )
         else:
             console.log(f"执行命令：{input_data}")
             commands = input_data.split(" ")
             if commands[0][1:] in ["rename", "ren"]:
                 if len(commands) == 2:
                     console.log(f"[green]已经将显示名称更改为 {commands[1]}[/green]")
-                    username = commands[1]
+                    config["username"] = commands[1]
                 else:
                     console.log("[red]命令接受一个参数，不多不少。[/red]")
             elif commands[0][1:] in ["quit", "q"]:
@@ -152,14 +140,18 @@ async def run_input():
                 raise SystemExit(3)  # 就是用来退出的别见怪
             else:
                 console.log(
-                    f"[red]用 COMMAND_PREFIX（当前为'{COMMAND_PREFIX}'）开头的消息"
+                    f"[red]用 COMMAND_PREFIX（当前为'{config['command_prefix']}'）开头的消息"
                     "将会被作为命令解析，这个功能还没做好，不急！！！！[/red]"
                 )
 
 
-asyncio.get_event_loop().run_until_complete(websockets.serve(echo, HOST, PORT))
+asyncio.get_event_loop().run_until_complete(
+    websockets.serve(echo, config["host"], config["port"])
+)
 
-console.log(f"[green]已经在 {HOST}:{PORT} 监听 websocket 请求，等待 echo 客户端接入...[/green]")
+console.log(
+    f"[green]已经在 {config['host']}:{config['port']} 监听 websocket 请求，等待 echo 客户端接入...[/green]"
+)
 console.log("[blue]tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端[/blue]")
 
 asyncio.get_event_loop().create_task(run_input())
