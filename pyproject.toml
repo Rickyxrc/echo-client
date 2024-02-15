@@ -6,7 +6,7 @@ authors = ["Rickyxrc <rickyxrc@outlook.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.9"
 websockets = "^12.0"
 rich = "^13.7.0"
 prompt-toolkit = "^3.0.43"
