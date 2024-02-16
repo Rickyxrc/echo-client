@@ -4,13 +4,14 @@ websocket 服务器模块
 """
 import asyncio
 import json
+import os
 
 import websockets
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
-from .message import parse_message, render
+from .message import get_delay, parse_message, render
 
 # TODO: 用配置文件来改这些，别修改源代码
 config = {}
@@ -18,6 +19,14 @@ config["command_prefix"] = "/"
 config["username"] = "/"
 config["host"] = "127.0.0.1"
 config["port"] = 3000
+config["typewriting"] = False
+# 自动在某些字符后面等待，自动在行末等待
+# 本质是文本替换，不知道有没有问题
+config["autopause"] = False
+# 在哪些字符后面等待呢？
+config["autopausestr"] = ",，.。;；:：!！"
+# 等待多久呢？
+config["autopausetime"] = 20
 
 console = Console()
 
@@ -36,7 +45,6 @@ async def get_message(websocket, cid):
     async for message in websocket:
         data = json.loads(message)
         response = f"客户端{cid}: "
-        _data_response = None
         if data["action"] == "hello":
             response += "上线"
             await websocket.send(
@@ -48,7 +56,11 @@ async def get_message(websocket, cid):
                             "messages": [
                                 {
                                     "message": [
-                                        {"text": "websocket服务器，", "pause": 15},
+                                        {
+                                            "text": "websocket服务器，",
+                                            "pause": 15,
+                                            "typewrite": "websocketfu'wu'qi",
+                                        },
                                         {"text": "连接成功！", "event": "shout"},
                                     ]
                                 },
@@ -66,7 +78,7 @@ async def get_message(websocket, cid):
             response += "页面恢复显示"
         else:
             response += f"发送了未知事件，事件原文: {data}"
-        console.log(response)
+        console.print(response)
 
 
 async def listen_queue(websocket, cid):
@@ -78,12 +90,13 @@ async def listen_queue(websocket, cid):
         await asyncio.sleep(1)
         if proceed < len(events):
             for event in events[proceed:]:
-                console.log(f"客户端{cid}: 执行 {event}")
+                console.print(f"客户端{cid}: 执行 {event}")
                 if event["action"] == "message_data":
-                    console.log(f"客户端{cid}: 发送文字信息")
+                    console.print(f"客户端{cid}: 发送文字信息")
                     await websocket.send(event["data"])
+                    await asyncio.sleep(event["delay"] / 1000.0)
                 else:
-                    console.log(f"[red]客户端{cid}: 上面那个事件的实现程序还没写呢！执行不了！[/red]")
+                    console.print(f"[red]客户端{cid}: 上面那个事件的实现程序还没写呢！执行不了！[/red]")
             proceed = len(events)
 
 
@@ -96,13 +109,92 @@ async def echo(websocket, _path):
         global client_id
         client_id += 1
         cid = client_id
-        console.log(f"客户端{client_id}: 已建立连接")
+        console.print(f"客户端{client_id}: 已建立连接")
         listen = asyncio.create_task(listen_queue(websocket, cid))
         get = asyncio.create_task(get_message(websocket, cid))
         await listen
         await get
     except websockets.exceptions.ConnectionClosedOK:
-        console.log(f"客户端{client_id}: 连接已断开")
+        console.print(f"客户端{client_id}: 连接已断开")
+
+
+def parse_command(command: str) -> None:
+    """
+    解析用户输入的内容
+    递归是因为要使用 source 来解析文件中的内容（适合预演）
+    """
+    # TODO: 这个太简陋了，考虑用 argparse 之类的库在这里解析命令
+
+    # pylint: disable = global-variable-not-assigned
+    global config
+    if command == "":
+        console.print("[red]打个字再回车啊宝！[/red]")
+    elif command[0] != config["command_prefix"]:
+        if config["autopause"]:
+            delay_str = f"/d{config['autopausetime']}"
+            command_tmp = ""
+            for index, ch in enumerate(command):
+                if ch in config["autopausestr"] and (
+                    index != len(command) - 1
+                    and command[index + 1] not in config["autopausestr"]
+                ):  # 不要重复delay，像'！！！'这样的情况在最后添加/d20
+                    command_tmp += ch + delay_str
+                else:
+                    command_tmp += ch
+            if not command_tmp.endswith(delay_str):  # 别加重复了宝
+                command_tmp += delay_str
+            command = command_tmp
+        console.print(f"发送文字消息: {command}")
+        syntax = parse_message(command)
+        events.append(
+            {
+                "action": "message_data",
+                "data": render(config, syntax),
+                "delay": get_delay(syntax),
+            }
+        )
+    else:
+        console.print(f"执行命令：{command}")
+        commands = command.split(" ")
+        if commands[0][1:] in ["rename", "ren"]:
+            if len(commands) == 2:
+                console.print(f"[green]已经将显示名称更改为 {commands[1]}[/green]")
+                config["username"] = commands[1]
+            else:
+                console.print("[red]命令接受一个参数，不多不少。[/red]")
+        elif commands[0][1:] in ["quit", "q"]:
+            console.print("拜拜~")
+            # TODO: 消掉退出时的错误提示
+            raise SystemExit(3)  # 就是用来退出的别见怪
+        elif commands[0][1:] in ["source", "s"]:
+            if len(commands) == 2:
+                path = os.path.join(os.getcwd(), commands[1])
+                console.print(f"[blue]从文件 {path} 中载入内容（文件中的每一行会被作为独立的部分输入到控制台里！）[/]")
+                try:
+                    with open(path, "r", encoding="utf-8") as file:
+                        texts = file.read().splitlines()
+                        for text in texts:
+                            if text == "" or text[0] == "#":
+                                continue  # 空行我们留在输入流里，使用 '#' 可以使用注释
+                            console.print(
+                                f"[blue]（自动执行）[/blue]请输入命令：{text}"
+                            )  # 给用户看着玩的，同时显示执行的每行命令
+                            parse_command(text)  # 递归解析，可以用来玩花活（自己递归自己导致的后果概不负责！）
+                except FileNotFoundError:
+                    console.print("[red]这个文件怕是不存在吧！已终止后续的解析！[/]")
+                    return
+                console.print("[green]所有命令已执行完成！[/]")
+            else:
+                console.print("[red]命令接受一个参数，不多不少。[/red]")
+        elif commands[0][1:] in ["toggle-typewriting", "tt"]:  # 打开 / 关闭 typewriting 功能
+            config["typewriting"] = not config["typewriting"]
+            console.print(f"[green]Typewriting 状态已经变更为 {config['typewriting']}[/]")
+        elif commands[0][1:] in ["toggle-autopause", "ta"]:  # 打开 / 关闭 autopause 功能
+            config["autopause"] = not config["autopause"]
+            console.print(f"[green]autopause 状态已经变更为 {config['autopause']}[/]")
+        else:
+            console.print("[red]这个命令怕是不存在吧……[/]")
+            console.print("[blue]tips: 如果你想要发消息，请不要用 '/' 开头！[/]")
 
 
 async def run_input():
@@ -114,47 +206,19 @@ async def run_input():
     while True:
         with patch_stdout(raw=True):
             input_data = await session.prompt_async("请输入命令: ")
-        # TODO: 这个太简陋了，考虑用 argparse 之类的库在这里解析命令
-        if input_data == "":
-            console.log("[red]打个字再回车啊宝！[/red]")
-        elif input_data[0] != config["command_prefix"]:
-            console.log(f"发送文字消息: {input_data}")
-            events.append(
-                {
-                    "action": "message_data",
-                    "data": render(config, parse_message(input_data)),
-                }
-            )
-        else:
-            console.log(f"执行命令：{input_data}")
-            commands = input_data.split(" ")
-            if commands[0][1:] in ["rename", "ren"]:
-                if len(commands) == 2:
-                    console.log(f"[green]已经将显示名称更改为 {commands[1]}[/green]")
-                    config["username"] = commands[1]
-                else:
-                    console.log("[red]命令接受一个参数，不多不少。[/red]")
-            elif commands[0][1:] in ["quit", "q"]:
-                console.log("拜拜~")
-                # TODO: 消掉退出时的错误提示
-                raise SystemExit(3)  # 就是用来退出的别见怪
-            else:
-                console.log(
-                    f"[red]用 COMMAND_PREFIX（当前为'{config['command_prefix']}'）开头的消息"
-                    "将会被作为命令解析，这个功能还没做好，不急！！！！[/red]"
-                )
+            parse_command(input_data)
 
 
 asyncio.get_event_loop().run_until_complete(
     websockets.serve(echo, config["host"], config["port"])
 )
 
-console.log(
+console.print(
     f"[green]已经在 {config['host']}:{config['port']} 监听 websocket 请求，等待 echo 客户端接入...[/green]"
 )
-console.log("[blue]tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端[/blue]")
+console.print("[blue]tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端[/blue]")
 
 asyncio.get_event_loop().create_task(run_input())
-console.log("[green]用户输入模块加载成功，您现在可以开始输入命令了，客户端连接后会自动执行！[/green]")
+console.print("[green]用户输入模块加载成功，您现在可以开始输入命令了，客户端连接后会自动执行！[/green]")
 
 asyncio.get_event_loop().run_forever()

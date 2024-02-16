@@ -5,6 +5,7 @@
 """
 import json
 
+from pypinyin import lazy_pinyin
 from rich.console import Console
 from rich.markup import escape
 
@@ -22,10 +23,7 @@ CHAR_PREFIX = "/"
 SYM_I = 1  # 这里值的意义仅仅是区分
 SYM_D = 2
 
-# TODO: 这些注释可以删了，废稿但是没完全废
-# 这里前置属性/附加属性的区分只是为了方便理解
-# 前置属性影响下一个短落
-# 附加属性影响上一个段落（同时结束段落）
+# TODO: printSpeed 调整命令
 SYMBOLS = {
     # bold 粗体
     "b": SYM_D,
@@ -46,16 +44,18 @@ SYM_ARGS = {
     # 数字参数的闭合方法很简单，非数字字符即可
     # 可能会遇到以下问题，如果有一个人叫 11 （纯属虚构），然后 ta 的名字前面需要使用 delay 命令
     # 此时可能需要使用 '/' 手动闭合
-    #   这样吗？/d1000/11今天也很想你！
+    #   就像这样：/d1000/11今天也很想你！
     # 因此，整体的检测逻辑如下：
     #   在检测命令需要参数之后，会一直获取参数直到遇到 '/' 或者不合法字符。
     #   如果遇到 '/' 会从 '/' 后面接着解析（丢弃字符 '/'），如果是不合法字符就留在输入流里面
-    # 举例：假设有一个命令 z 需要的参数类型依次是 int, str, int
+    #  如果准备丢弃的 '/' 字符是下一个命令的开始（即 '/' 后面可以构成一个合法的命令），则保留字符 '/'
+    # 举例：假设有一个命令 z 需要的参数类型依次是 int, str, int（哪里会有这么复杂的命令啊啊）
     # /z123abc/456 就是命令的最简化写法，会被解析为 {'cmd': 'z', 'arg': [123, 'abc', '456']}
     # /z123/123/456 也是合法写法，会被解析为 {'cmd': 'z', 'arg': [123, '123', 123]}
-    # 延迟的字符数量
+    # 假设另一个命令 y 不需要参数
+    # /z123abc/456/y 就是命令的最简化写法
     "d": [
-        "int",
+        "int",  # 延迟的字符数量
     ],
 }
 
@@ -76,7 +76,27 @@ def node_end(pointer: dict, char: str) -> bool:
     return True
 
 
-def parse_message(msg: str) -> list[dict[str, str | int | dict]]:
+ALPHAS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def get_typewriting_string(text: str) -> str:
+    """
+    输入一串文字，输出模拟打字的效果
+    只支持英文和中文，如果您是日V的话对不起啦~
+    如果您能够提交PR的话十分感谢~~
+    """
+    res = ""
+    for index, ch in enumerate(text):
+        if ch in ALPHAS:
+            res += ch
+        else:
+            if index != 0 and text[index - 1] not in ALPHAS:
+                res += "'"
+            res += lazy_pinyin(ch)[0]
+    return res
+
+
+def parse_message(msg: str) -> list:
     """
     解析文字输入，传出为 json 列表格式
     目前的语法是这样的，示例文本在下一行：
@@ -118,7 +138,21 @@ def parse_message(msg: str) -> list[dict[str, str | int | dict]]:
                                 index += 1
                         except ValueError:
                             if msg[index] == "/":
-                                index += 1
+                                # 在直接丢弃之前先尝试走字典树
+                                pointer_tmp = SYMBOLS
+                                index_tmp = index + 1
+                                valid_command = False
+                                while True:
+                                    if node_exists(pointer_tmp, msg[index_tmp]):
+                                        if node_end(pointer_tmp, msg[index_tmp]):
+                                            valid_command = True
+                                            break
+                                        pointer_tmp = pointer_tmp[msg[index_tmp]]
+                                        index_tmp += 1
+                                    else:
+                                        break
+                                if not valid_command:
+                                    index += 1  # 丢弃字符
                         except IndexError:
                             # 到达文本末尾，停止解析
                             pass
@@ -163,7 +197,7 @@ def parse_message(msg: str) -> list[dict[str, str | int | dict]]:
     return results
 
 
-def preview(console: Console, messages: list[dict[str, str | int | dict]]) -> None:
+def preview(console: Console, messages: list) -> None:
     """
     使用控制台预览效果
     别指望我做个QQ的窗口抖动效果出来哈
@@ -182,14 +216,42 @@ def preview(console: Console, messages: list[dict[str, str | int | dict]]) -> No
         console.print(res_str, end="")
 
 
-def render(config, messages: list[dict[str, str | int | dict]]) -> str:
+def get_delay(messages: list) -> int:
+    """
+    输入由 parse_message 生成的语法结构，输出预期延时时长（单位毫秒）
+    printSpeed 参数决定了每个字的打印延迟
+    等等，中日韩字符滚动速度减半！？
+    还有 typewriting？
+    我要死了啊啊啊啊啊
+    """
+    # TODO: 让这玩意支持 typewriting（不知道超长的 typewriting 会不会改变预期行为导致被截断）
+    # TODO: 让这玩意支持 printSpeed（speed一改时间直接白算）
+    delay = 0
+
+    # at git@github.com:sheep-realms/echo/js/echo.js:16
+    default_print_speed = 30
+
+    for message in messages:
+        for ch in message["text"]:
+            if ch in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                delay += default_print_speed
+            else:
+                delay += default_print_speed * 2  # 中日韩字符滚动速度减半
+        delay += default_print_speed * message.get("pause", 0) * 2
+    return delay
+
+
+def render(config, messages: list) -> str:
     """
     渲染为 Echo 程序可以理解的格式
     """
     # TODO: 简化发送向 Echo 客户端的内容，减轻客户端压力（如不发空 style）
     res_list = []
     for message in messages:
-        res_list.append(message)
+        message_data = message
+        if config["typewriting"]:
+            message_data["typewrite"] = get_typewriting_string(message["text"])
+        res_list.append(message_data)
 
     return json.dumps(
         {
@@ -213,11 +275,12 @@ if __name__ == "__main__":
         "这句话用来测试异常处理（delay在末尾的情况）/d100",
         "这句话用来测试屏幕振动动效/sh",
         "这句话的文本有/cr颜/cb色！！/r",
+        "这句话用于/b测试加粗/r结束加粗",
         "各位，/d50大家好！/d50几天不见，你想我了吗？/d100什么，/sh/b没有？？？/r",
     ]
 
     for tindex, sample in enumerate(sample_text):
-        console.print(f"[blue]示例文本 {tindex+1}/{len(sample_text)}: {sample}[/blue]")
+        console.print(f"[blue]示例文本 {tindex+1}/{len(sample_text)}: {sample}[/]")
         console.print("[blue]语法解析[/]：")
 
         res_messages = parse_message(sample)
@@ -227,7 +290,9 @@ if __name__ == "__main__":
         preview(console, res_messages)
         console.print()
 
-        console.print("发送给 Echo 程序的消息：")
+        console.print("[blue]发送给 Echo 程序的消息：[/]")
         console.print(render({"username": "用户名"}, res_messages))
+
+        console.print(f"[blue]预计时长: {get_delay(res_messages)}ms[/]")
 
         console.print()
