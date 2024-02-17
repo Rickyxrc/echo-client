@@ -145,14 +145,17 @@ def parse_command(command: str) -> None:
                 command_tmp += delay_str
             command = command_tmp
         console.print(f"发送文字消息: {command}")
-        syntax = parse_message(command)
-        events.append(
-            {
-                "action": "message_data",
-                "data": render(config, syntax),
-                "delay": get_delay(syntax),
-            }
-        )
+        try:
+            syntax = parse_message(command)
+            events.append(
+                {
+                    "action": "message_data",
+                    "data": render(config, syntax),
+                    "delay": get_delay(syntax),
+                }
+            )
+        except ValueError as e:
+            console.print(f"[red]{e}行内命令不存在！[/red]")
     else:
         console.print(f"执行命令：{command}")
         commands = command.split(" ")

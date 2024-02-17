@@ -112,17 +112,20 @@ def parse_message(msg: str) -> list:
             pointer = SYMBOLS
             command = ""
             index += 1
-            while True:
-                if node_exists(pointer, msg[index]):
-                    command += msg[index]
-                    if node_end(pointer, msg[index]):
+            try:
+                while True:
+                    if node_exists(pointer, msg[index]):
+                        command += msg[index]
+                        if node_end(pointer, msg[index]):
+                            pointer = pointer[msg[index]]
+                            index += 1
+                            break
                         pointer = pointer[msg[index]]
                         index += 1
-                        break
-                    pointer = pointer[msg[index]]
-                    index += 1
-                else:
-                    break
+                    else:
+                        raise ValueError
+            except IndexError as e:  # 走到末尾但是没有完全匹配
+                raise ValueError("末尾的命令没有完全匹配！") from e
 
             if SYM_ARGS.get(command, None) is not None:
                 args = SYM_ARGS.get(command, None)
@@ -136,31 +139,33 @@ def parse_message(msg: str) -> list:
                                 res_val = int(res_str + msg[index])
                                 res_str += msg[index]
                                 index += 1
-                        except ValueError:
+                        except ValueError as exc:
                             if msg[index] == "/":
                                 # 在直接丢弃之前先尝试走字典树
                                 pointer_tmp = SYMBOLS
                                 index_tmp = index + 1
                                 valid_command = False
-                                while True:
-                                    if node_exists(pointer_tmp, msg[index_tmp]):
-                                        if node_end(pointer_tmp, msg[index_tmp]):
-                                            valid_command = True
-                                            break
-                                        pointer_tmp = pointer_tmp[msg[index_tmp]]
-                                        index_tmp += 1
-                                    else:
-                                        break
-                                if not valid_command:
-                                    index += 1  # 丢弃字符
+                                try:
+                                    while True:
+                                        if node_exists(pointer_tmp, msg[index_tmp]):
+                                            if node_end(pointer_tmp, msg[index_tmp]):
+                                                valid_command = True
+                                                break
+                                            pointer_tmp = pointer_tmp[msg[index_tmp]]
+                                            index_tmp += 1
+                                        else:
+                                            raise ValueError from exc
+                                    if not valid_command:
+                                        index += 1  # 丢弃字符
+                                except IndexError:  # 走到末尾但是没有完全匹配
+                                    pass
                         except IndexError:
                             # 到达文本末尾，停止解析
                             pass
                         res.append(res_val)
                     else:
                         # 你放了不该放的参数，应该修改 SYM_ARGS
-                        # console.print("[red]这是一个内部错误！[/red]")
-                        raise ValueError
+                        raise SystemExit(1)  # 这是一个内部错误
 
             if command == "sh":
                 results.append({"text": "", "event": "shout"})
