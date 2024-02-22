@@ -50,6 +50,7 @@ SYM_ARGS = {
     #   如果遇到 '/' 会从 '/' 后面接着解析（丢弃字符 '/'），如果是不合法字符就留在输入流里面
     #  如果准备丢弃的 '/' 字符是下一个命令的开始（即 '/' 后面可以构成一个合法的命令），则保留字符 '/'
     # 举例：假设有一个命令 z 需要的参数类型依次是 int, str, int（哪里会有这么复杂的命令啊啊）
+    # 所以上面的命令中，这样也是合法的：/d1000/sh11今天也很想你！
     # /z123abc/456 就是命令的最简化写法，会被解析为 {'cmd': 'z', 'arg': [123, 'abc', '456']}
     # /z123/123/456 也是合法写法，会被解析为 {'cmd': 'z', 'arg': [123, '123', 123]}
     # 假设另一个命令 y 不需要参数
@@ -101,7 +102,7 @@ def parse_message(msg: str) -> list:
     解析文字输入，传出为 json 列表格式
     目前的语法是这样的，示例文本在下一行：
         各位，/d500大家好！/d500几天不见，你想我了吗？/d1000什么，/b没有？？？/r
-    解析的原理大概是栈。
+    解析原理看下面吧，几句话不好说清楚
     """
     style = {}  # 当前的样式信息
     results = []
@@ -221,6 +222,7 @@ def preview(console: Console, messages: list) -> None:
         console.print(res_str, end="")
 
 
+# TODO: 删除这个用法，echo 在 1.3.0 更新状态代码
 def get_delay(messages: list) -> int:
     """
     输入由 parse_message 生成的语法结构，输出预期延时时长（单位毫秒）
@@ -229,8 +231,6 @@ def get_delay(messages: list) -> int:
     还有 typewriting？
     我要死了啊啊啊啊啊
     """
-    # TODO: 让这玩意支持 typewriting（不知道超长的 typewriting 会不会改变预期行为导致被截断）
-    # TODO: 让这玩意支持 printSpeed（speed一改时间直接白算）
     delay = 0
 
     # at git@github.com:sheep-realms/echo/js/echo.js:16
