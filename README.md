@@ -37,6 +37,7 @@ pip install echo-client
 正确运行程序，控制台输出应该类似这样（有颜色）：
 
 ```
+从 /home/ricky/.config/echo-client/config.yaml 加载了配置
 已经在 127.0.0.1:3000 监听 websocket 请求，等待 echo 客户端接入...
 tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端
 用户输入模块加载成功，您现在可以开始输入命令了，客户端连接后会自动执行！
