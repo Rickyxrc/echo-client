@@ -11,24 +11,12 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
+from .config import load_config
 from .message import get_delay, parse_message, render
 
-# TODO: 用配置文件来改这些，别修改源代码
-config = {}
-config["command_prefix"] = "/"
-config["username"] = "/"
-config["host"] = "127.0.0.1"
-config["port"] = 3000
-config["typewriting"] = False
-# 自动在某些字符后面等待，自动在行末等待
-# 本质是文本替换，不知道有没有问题
-config["autopause"] = False
-# 在哪些字符后面等待呢？
-config["autopausestr"] = ",，.。;；:：!！"
-# 等待多久呢？
-config["autopausetime"] = 20
-
 console = Console()
+
+config = load_config(console)
 
 events = []
 
@@ -213,16 +201,24 @@ async def run_input():
             parse_command(input_data)
 
 
-asyncio.get_event_loop().run_until_complete(
-    websockets.serve(echo, config["host"], config["port"])
-)
+def main_loop():
+    """
+    主程序逻辑
+    """
+    asyncio.get_event_loop().run_until_complete(
+        websockets.serve(echo, config["host"], config["port"])
+    )
 
-console.print(
-    f"[green]已经在 {config['host']}:{config['port']} 监听 websocket 请求，等待 echo 客户端接入...[/green]"
-)
-console.print("[blue]tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端[/blue]")
+    console.print(
+        f"[green]已经在 {config['host']}:{config['port']} 监听 websocket 请求，等待 echo 客户端接入...[/green]"
+    )
+    console.print("[blue]tips: 如果没有看到成功的连接请求，可以尝试刷新一下客户端[/blue]")
 
-asyncio.get_event_loop().create_task(run_input())
-console.print("[green]用户输入模块加载成功，您现在可以开始输入命令了，客户端连接后会自动执行！[/green]")
+    asyncio.get_event_loop().create_task(run_input())
+    console.print("[green]用户输入模块加载成功，您现在可以开始输入命令了，客户端连接后会自动执行！[/green]")
 
-asyncio.get_event_loop().run_forever()
+    asyncio.get_event_loop().run_forever()
+
+
+if __name__ == "__main__":
+    main_loop()

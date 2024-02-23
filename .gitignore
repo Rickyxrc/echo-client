@@ -8,3 +8,7 @@ __pycache__
 # poetry build
 dist/
 
+# nix build
+result
+
+*.log

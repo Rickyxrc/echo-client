@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "echo-client"
-version = "0.1.6"
+version = "0.2.2"
 description = ""
 authors = ["Rickyxrc <rickyxrc@outlook.com>"]
 readme = "README.md"
@@ -11,7 +11,10 @@ websockets = "^12.0"
 rich = "^13.7.0"
 prompt-toolkit = "^3.0.43"
 pypinyin = "^0.50.0"
+pyyaml = "^6.0.1"
 
+[tool.poetry.scripts]
+echo-client = 'echo_client.__main__:main_loop'
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"
