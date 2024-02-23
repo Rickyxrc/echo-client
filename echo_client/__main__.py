@@ -84,8 +84,9 @@ async def get_message(websocket, cid):
 async def listen_queue(websocket, cid):
     """
     监听事件队列，如果有啥事情就执行
+    新连接的终端不发送之前的文字消息
     """
-    proceed = 0
+    proceed = len(events)  # 新连接的终端不处理之前的消息
     while True:
         await asyncio.sleep(1)
         if proceed < len(events):
