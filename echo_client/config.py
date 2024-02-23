@@ -22,7 +22,7 @@ def load_config(console: Console) -> dict:
     )
     if config_path.exists():
         config = yaml.safe_load(open(config_path, "r", encoding="utf-8"))
-        console.log(f"[green]从 {config_path} 加载了配置[/]")
+        console.print(f"[green]从 {config_path} 加载了配置[/]")
     else:
         default_config = {
             "command_prefix": "/",
@@ -44,7 +44,7 @@ def load_config(console: Console) -> dict:
             pass
         with open(config_path, "w", encoding="utf-8") as write_stream:
             write_stream.write(yaml.safe_dump(default_config))
-        console.log("[yellow]您没有配置文件，已经创建了一个默认的[/]")
+        console.print("[yellow]您没有配置文件，已经创建了一个默认的[/]")
         load_config(console)
     return config
 
